@@ -309,7 +309,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
                       onPlatformViewCreated: _onPlatformViewCreated,
                     )
                   : AndroidView(
-                      viewType: 'exoplayer_view',
+                      viewType: 'plugins.frame/flutter_player',
                       onPlatformViewCreated: _onPlatformViewCreated,
                     ),
             ),
