@@ -53,11 +53,15 @@ class FramePlayerView(context: Context, viewId: Int, messenger: BinaryMessenger)
             player = this@FramePlayerView.player
         }
 
-        // Add the PlayerView to the FrameLayout
-        playerContainer.addView(playerView, FrameLayout.LayoutParams(
+        // Create layout parameters to center the PlayerView in the FrameLayout
+        val layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
-        ))
+        ).apply {
+            gravity = android.view.Gravity.CENTER
+        }
+        playerContainer.addView(playerView, layoutParams)
+
         val mediaItem = MediaItem.Builder()
             .setUri("https://files.etibor.uz/media/backup_beekeeper/master.m3u8")
             .build()
