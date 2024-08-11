@@ -3,34 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
-class SwiftFlutterVideoPlugin {
-  static const MethodChannel _channel = MethodChannel('flutter_video_plugin');
-
-  Future<void> changeAudio(String language) async {
-    try {
-      await _channel.invokeMethod('changeAudio', {'language': language});
-    } on PlatformException catch (e) {
-      print("Failed to change audio: '${e.message}'.");
-    }
-  }
-
-  Future<void> changeVideoQuality(String url) async {
-    try {
-      await _channel.invokeMethod('changeVideoQuality', {'url': url});
-    } on PlatformException catch (e) {
-      print("Failed to change video quality: '${e.message}'.");
-    }
-  }
-
-  Future<void> setPlaybackSpeed(double speed) async {
-    try {
-      await _channel.invokeMethod('setPlaybackSpeed', {'speed': speed});
-    } on PlatformException catch (e) {
-      print("Failed to set playback speed: '${e.message}'.");
-    }
-  }
-}
-
 class VideoPlayerWidget extends StatefulWidget {
   @override
   _VideoPlayerWidgetState createState() => _VideoPlayerWidgetState();
@@ -45,6 +17,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
   double _videoDuration = 1.0;
   String _totalDuration = "00:00";
   List<String> _subtitles = [];
+  List<String> _audioOptions = [];
   bool isLandscape = false;
   bool pause = false;
 
@@ -57,8 +30,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
 
   @override
   void dispose() {
-    platform?.invokeMethod('disposePlayer');
     WidgetsBinding.instance.removeObserver(this);
+    platform?.invokeMethod('disposePlayer');
+
     super.dispose();
   }
 
@@ -118,10 +92,17 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         });
         break;
       case 'updateBuffer':
-        double bufferValue = double.parse(call.arguments);
-        setState(() {
-          _bufferSliderValue = bufferValue / _videoDuration;
-        });
+        if (Platform.isAndroid) {
+          double bufferValue = call.arguments as double;
+          setState(() {
+            _bufferSliderValue = bufferValue / 100.0;
+          });
+        } else {
+          double bufferValue = double.parse(call.arguments);
+          setState(() {
+            _bufferSliderValue = bufferValue / _videoDuration;
+          });
+        }
         break;
       case 'updateDuration':
         double duration;
@@ -136,13 +117,15 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
         });
         break;
       case 'updateAudio':
-        List<dynamic> subtitles = call.arguments;
+        List<dynamic> audioOptions = call.arguments;
+
         setState(() {
-          _subtitles = subtitles.cast<String>();
+          _audioOptions = audioOptions.cast<String>();
         });
         break;
       case 'updateSubtitles':
         List<dynamic> subtitles = call.arguments;
+
         setState(() {
           _subtitles = subtitles.cast<String>();
         });
@@ -186,6 +169,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
               title: Text(option['resolution']!),
               onTap: () {
                 _changeVideoQuality(option['uri']!);
+                debugPrint(option['uri']!);
                 Navigator.pop(context);
               },
             );
@@ -280,7 +264,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       context: context,
       builder: (BuildContext context) {
         return ListView(
-          children: _subtitles.map((subtitle) {
+          children: _audioOptions.map((subtitle) {
             return ListTile(
               title: Text(subtitle),
               onTap: () {
@@ -299,7 +283,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text('Video Plugin'),
+        title: Text('test'),
         actions: [
           IconButton(
             icon: Icon(isLandscape
@@ -325,7 +309,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
                       onPlatformViewCreated: _onPlatformViewCreated,
                     )
                   : AndroidView(
-                      viewType: 'plugins.frame/flutter_player',
+                      viewType: 'exoplayer_view',
                       onPlatformViewCreated: _onPlatformViewCreated,
                     ),
             ),
@@ -449,14 +433,12 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
                     _elapsedTime = FormatDuration().formatDuration(
                         Duration(seconds: (value * _videoDuration).toInt()));
                   });
-                  _sendIsSliderBeingDragged(
-                      true); // Notify that the slider is being dragged
+                  _sendIsSliderBeingDragged(true);
                 },
                 onChangeEnd: (double value) {
                   _sendSeekValue(value);
                   print('Flutter slider: $value');
-                  _sendIsSliderBeingDragged(
-                      false); // Notify that the slider dragging ended
+                  _sendIsSliderBeingDragged(false);
                 },
               ),
             ],
@@ -470,9 +452,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
   void _onPlatformViewCreated(int id) {
     platform = MethodChannel('fluff_view_channel_$id');
     platform?.setMethodCallHandler(_handleMethodCall);
-    debugPrint("Flutter Debugging:::");
-    debugPrint(platform!.name);
-    debugPrint(platform.toString());
   }
 
   Future<void> _sendData(String type) async {
@@ -509,6 +488,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
     }
   }
 
+  //Android
   Future<void> _sendDataAndroid(String type) async {
     if (platform == null) return;
 
@@ -520,6 +500,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
       print("Failed to send data: '${e.message}'.");
     }
   }
+
+//Android
 }
 
 class FormatDuration {
