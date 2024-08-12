@@ -55,7 +55,7 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
         setupAirPlayButton()
         methodChannel.setMethodCallHandler(handle)
         addPeriodicTimeObserver()
-        fetchAudio()
+        fetchAudioAndSubtitles()
         NotificationCenter.default.addObserver(self, selector: #selector(orientationChanged), name: UIDevice.orientationDidChangeNotification, object: nil)
     }
 
@@ -124,7 +124,10 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
         case "seekTo":
             handleSeekTo(call: call, result: result)
         case "fetchAudio":
-            fetchAudio()
+            fetchAudioAndSubtitles()
+            result(nil)
+        case "fetchSubtitles":
+            fetchSubtitles()
             result(nil)
         case "changeAudio":
             guard let args = call.arguments as? [String: Any], let language = args["language"] as? String else {
@@ -384,38 +387,44 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
         }
     }
 
-    private func fetchAudio() {
+    private func fetchAudio(completion: @escaping () -> Void) {
         guard let playerItem = player?.currentItem else {
             methodChannel.invokeMethod("updateAudio", arguments: []) { result in
                 if let error = result as? FlutterError {
-                    print("Failed to send subtitles to Flutter: \(error.message ?? "")")
+                    print("Failed to send audio tracks to Flutter: \(error.message ?? "")")
                 } else {
-                    print("Subtitles sent to Flutter: \(result ?? "nil")")
+                    print("Audio tracks sent to Flutter: \(result ?? "nil")")
                 }
+                completion()
             }
             return
         }
 
-        var subtitles: [String] = []
+        var audioOptions: [String] = []
         if let mediaSelectionGroup = playerItem.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) {
             for option in mediaSelectionGroup.options {
                 if let locale = option.locale {
-                    subtitles.append(locale.identifier)
+                    audioOptions.append(locale.identifier)
                 } else {
-                    subtitles.append("Unknown")
+                    audioOptions.append("Unknown")
                 }
             }
         }
 
-        methodChannel.invokeMethod("updateAudio", arguments: subtitles) { result in
+        methodChannel.invokeMethod("updateAudio", arguments: audioOptions) { result in
             if let error = result as? FlutterError {
-                print("Failed to send subtitles to Flutter: \(error.message ?? "")")
+                print("Failed to send audio tracks to Flutter: \(error.message ?? "")")
             } else {
-                print("Subtitles sent to Flutter: \(result ?? "nil")")
+                print("Audio tracks sent to Flutter successfully")
             }
+            completion()
         }
     }
-
+    private func fetchAudioAndSubtitles() {
+        fetchAudio { [weak self] in
+            self?.fetchSubtitles()
+        }
+    }
     private func fetchSubtitles() {
         guard let playerItem = player?.currentItem else {
             methodChannel.invokeMethod("updateSubtitles", arguments: []) { result in
@@ -447,7 +456,6 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
             }
         }
     }
-
     private func changeSubtitle(language: String) {
         guard let playerItem = player?.currentItem, let mediaSelectionGroup = playerItem.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else { return }
 
