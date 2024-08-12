@@ -4,9 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 class VideoPlayerWidget extends StatefulWidget {
-  final String videoUrl;
-  VideoPlayerWidget({required this.videoUrl});
-
   @override
   _VideoPlayerWidgetState createState() => _VideoPlayerWidgetState();
 }
@@ -29,7 +26,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     platform?.setMethodCallHandler(_handleMethodCall);
-    _initializePlayer(widget.videoUrl);
   }
 
   @override
@@ -61,17 +57,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget>
     setState(() {
       isLandscape = !isLandscape;
     });
-  }
-
-  Future<void> _initializePlayer(String url) async {
-    if (platform == null) return;
-
-    try {
-      await platform!.invokeMethod('initializePlayer', {'url': url});
-      print("Player initialized with URL: $url");
-    } on PlatformException catch (e) {
-      print("Failed to initialize player: '${e.message}'.");
-    }
   }
 
   Future<List<Map<String, String>>> parseM3U8(String url) async {
