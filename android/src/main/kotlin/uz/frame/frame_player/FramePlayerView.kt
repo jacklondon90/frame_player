@@ -62,12 +62,12 @@ class FramePlayerView(context: Context, viewId: Int, messenger: BinaryMessenger)
         }
         playerContainer.addView(playerView, layoutParams)
 
-        val mediaItem = MediaItem.Builder()
+      /*  val mediaItem = MediaItem.Builder()
             .setUri("https://files.etibor.uz/media/backup_beekeeper/master.m3u8")
             .build()
         player.setMediaItem(mediaItem)
         player.prepare()
-        player.play()
+        player.play()*/
         methodChannel = MethodChannel(messenger, "fluff_view_channel_$viewId")
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -102,6 +102,15 @@ class FramePlayerView(context: Context, viewId: Int, messenger: BinaryMessenger)
 
         methodChannel.setMethodCallHandler { call, result ->
             when (call.method) {
+                "initializePlayer" -> {
+                    val url = call.argument<String>("url")
+                    if (url != null) {
+                        initializePlayer(url)
+                        result.success(null)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "URL is null", null)
+                    }
+                }
                 "seekTo" -> {
                     val position = call.argument<Double>("value")
                     if (position != null) {
@@ -312,6 +321,17 @@ class FramePlayerView(context: Context, viewId: Int, messenger: BinaryMessenger)
     private fun setPlaybackSpeed(speed: Float) {
         player.setPlaybackSpeed(speed)
     }
+
+
+    private fun initializePlayer(url: String) {
+        val mediaItem = MediaItem.Builder()
+            .setUri(url)
+            .build()
+        player.setMediaItem(mediaItem)
+        player.prepare()
+        player.play()
+    }
+
 
     override fun getView(): View {
         return playerContainer

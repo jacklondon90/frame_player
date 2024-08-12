@@ -37,6 +37,8 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
-    return VideoPlayerWidget();
+    return VideoPlayerWidget(
+      videoUrl: "https://files.etibor.uz/media/backup_beekeeper/master.m3u8",
+    );
   }
 }
