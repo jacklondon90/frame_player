@@ -34,7 +34,7 @@ public class SwiftPlayerFactory: NSObject, FlutterPlatformViewFactory {
 }
 
 public class SwiftPlayer: NSObject, FlutterPlatformView {
-    private let frame: CGRect
+ private let frame: CGRect
     private let viewId: Int64
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
@@ -45,17 +45,20 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
     private var timeObserverToken: Any?
     private var isSliderBeingDragged = false
 
-    init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
+    init(frame: CGRect, viewId: Int64, args: Any?) {
         self.frame = frame
         self.viewId = viewId
         self.containerView = Self.createContainerView()
-        self.methodChannel = FlutterMethodChannel(name: "fluff_view_channel_\(viewId)", binaryMessenger: messenger)
+        self.methodChannel = FlutterMethodChannel(
+            name: "fluff_view_channel_\(viewId)",
+            binaryMessenger: (UIApplication.shared.delegate as! FlutterAppDelegate).window?.rootViewController as! FlutterBinaryMessenger
+        )
         super.init()
         setupPlayer()
         setupAirPlayButton()
         methodChannel.setMethodCallHandler(handle)
         addPeriodicTimeObserver()
-        fetchAudio()
+        fetchAudioAndSubtitles()
         NotificationCenter.default.addObserver(self, selector: #selector(orientationChanged), name: UIDevice.orientationDidChangeNotification, object: nil)
     }
 
@@ -124,7 +127,10 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
         case "seekTo":
             handleSeekTo(call: call, result: result)
         case "fetchAudio":
-            fetchAudio()
+            fetchAudioAndSubtitles()
+            result(nil)
+        case "fetchSubtitles":
+            fetchSubtitles()
             result(nil)
         case "changeAudio":
             guard let args = call.arguments as? [String: Any], let language = args["language"] as? String else {
@@ -148,10 +154,10 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
                 return
             }
             changeSubtitle(language: language)
-            result(nil)     
-        case "disposePlayer":
-            dispose()
             result(nil)
+        case "disposePlayer":
+              dispose()
+              result(nil)
         case "isSliderBeingDragged":
             if let args = call.arguments as? [String: Any], let isDragging = args["isDragging"] as? Bool {
                 isSliderBeingDragged = isDragging
@@ -161,6 +167,7 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
             result(FlutterMethodNotImplemented)
         }
     }
+
 
     private func setPlaybackSpeed(speed: Double) {
         player?.rate = Float(speed)
@@ -205,7 +212,7 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
             }
         }
     }
-
+    
     private func sendBufferDurationToFlutter(bufferDuration: Double) {
         methodChannel.invokeMethod("updateBuffer", arguments: "\(bufferDuration)") { result in
             if let error = result as? FlutterError {
@@ -215,6 +222,7 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
             }
         }
     }
+
 
     private func handleChangeVideoQuality(call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any], let urlString = args["url"] as? String, let videoUrl = URL(string: urlString) else {
@@ -234,7 +242,6 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
         let mediaSelectionGroup = playerItem.asset.mediaSelectionGroup(forMediaCharacteristic: .legible)
         return playerItem.selectedMediaOption(in: mediaSelectionGroup!)
     }
-
 
     private func changeVideoQuality(url: URL) {
         guard let player = player, let currentItem = player.currentItem else { return }
@@ -262,6 +269,20 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
         isObserverAdded = true
 
         player.replaceCurrentItem(with: newItem)
+
+      /*  DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.selectAudioTrack(for: newItem)
+            self.selectVideoQuality(for: newItem, qualityUrl: url)
+            let timeScale = newItem.asset.duration.timescale
+            let seekTime = CMTime(seconds: CMTimeGetSeconds(currentTime), preferredTimescale: timeScale)
+            newItem.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                self?.isThumbSeek = false
+                self?.player?.play()
+                if let playerItem = self?.player?.currentItem {
+                    self?.setInitialAudioLanguage(playerItem: playerItem)
+                }
+            }
+        }*/
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
              let timeScale = newItem.asset.duration.timescale
              let seekTime = CMTime(seconds: CMTimeGetSeconds(currentTime), preferredTimescale: timeScale)
@@ -306,6 +327,7 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
             isObserverAdded = false
         }
     }
+
     private func selectAudioTrack(for playerItem: AVPlayerItem) {
         guard let mediaSelectionGroup = playerItem.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) else { return }
 
@@ -383,39 +405,47 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
             }
         }
     }
+    
+    private func fetchAudioAndSubtitles() {
+        fetchAudio { [weak self] in
+            self?.fetchSubtitles()
+        }
+    }
 
-    private func fetchAudio() {
+    private func fetchAudio(completion: @escaping () -> Void) {
         guard let playerItem = player?.currentItem else {
             methodChannel.invokeMethod("updateAudio", arguments: []) { result in
                 if let error = result as? FlutterError {
-                    print("Failed to send subtitles to Flutter: \(error.message ?? "")")
+                    print("Failed to send audio tracks to Flutter: \(error.message ?? "")")
                 } else {
-                    print("Subtitles sent to Flutter: \(result ?? "nil")")
+                    print("Audio tracks sent to Flutter: \(result ?? "nil")")
                 }
+                completion()
             }
             return
         }
 
-        var subtitles: [String] = []
+        var audioOptions: [String] = []
         if let mediaSelectionGroup = playerItem.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) {
             for option in mediaSelectionGroup.options {
                 if let locale = option.locale {
-                    subtitles.append(locale.identifier)
+                    audioOptions.append(locale.identifier)
                 } else {
-                    subtitles.append("Unknown")
+                    audioOptions.append("Unknown")
                 }
             }
         }
 
-        methodChannel.invokeMethod("updateAudio", arguments: subtitles) { result in
+        methodChannel.invokeMethod("updateAudio", arguments: audioOptions) { result in
             if let error = result as? FlutterError {
-                print("Failed to send subtitles to Flutter: \(error.message ?? "")")
+                print("Failed to send audio tracks to Flutter: \(error.message ?? "")")
             } else {
-                print("Subtitles sent to Flutter: \(result ?? "nil")")
+                print("Audio tracks sent to Flutter successfully")
             }
+            completion()
         }
     }
-
+    
     private func fetchSubtitles() {
         guard let playerItem = player?.currentItem else {
             methodChannel.invokeMethod("updateSubtitles", arguments: []) { result in
@@ -447,7 +477,6 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
             }
         }
     }
-
     private func changeSubtitle(language: String) {
         guard let playerItem = player?.currentItem, let mediaSelectionGroup = playerItem.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else { return }
 
@@ -459,6 +488,7 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
         }
         playerItem.select(nil, in: mediaSelectionGroup)
     }
+
 
     private func changeAudio(language: String) {
         guard let playerItem = player?.currentItem, let mediaSelectionGroup = playerItem.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) else { return }
@@ -502,6 +532,7 @@ public class SwiftPlayer: NSObject, FlutterPlatformView {
             }
         }
     }
+    
     public func dispose() {
         if let playerItem = player?.currentItem, isObserverAdded {
             removeObservers(from: playerItem)

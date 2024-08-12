@@ -73,7 +73,7 @@ class FramePlayerView(context: Context, viewId: Int, messenger: BinaryMessenger)
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) {
                     val duration = player.duration
-                    methodChannel.invokeMethod("updateDuration", duration / 1000.0) // Send duration in seconds
+                    methodChannel.invokeMethod("updateDuration", duration / 1000.0) 
                     updateAudioAndSubtitleOptions()
 
                 }
