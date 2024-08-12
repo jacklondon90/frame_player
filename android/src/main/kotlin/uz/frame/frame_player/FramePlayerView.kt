@@ -171,6 +171,10 @@ class FramePlayerView(context: Context, viewId: Int, messenger: BinaryMessenger)
                         result.error("INVALID_ARGUMENT", "isDragging is null", null)
                     }
                 }
+                "disposePlayer" -> {
+                    player.release()
+                    result.success(null)
+                }
                 else -> result.notImplemented()
 
             }
